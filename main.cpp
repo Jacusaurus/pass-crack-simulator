@@ -8,7 +8,6 @@ using namespace std;
 
 class VectorManipulator;
 void worker_thread(int current_len, int covered_section);
-struct thread_params;
 vector<char> char_pool = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 
     'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '-', '_', '+', '=', '{', '}', '[', ']', '|', '\\', ':', ';', '"', '\'', '<', '>', ',', '.', '?', '/', '~', '`'};
 vector<char> password_input;
@@ -23,7 +22,6 @@ void parse_args(int argc, char const* argv[], vector<char> &args) {
     for (int i = 0; i < strlen(arg); i++) {
         args.push_back(arg[i]);
     }
-    //args.pop_back(); // remove the null terminator
 }
 
 // Print the vector
@@ -49,7 +47,7 @@ class VectorManipulator {
             this->current_len = current_len;
             this->begin_char = begin_char;
             this->end_char = end_char;
-            this->char_vector = vector<char>();
+            this->char_vector = vector<char>(current_len);
         }
         // methods
         bool compare_vector (vector<char> &user_pass) {
@@ -69,30 +67,38 @@ class VectorManipulator {
         }
         // generates all possible passwords of length n
         void generate_passwords(int n) {
-            for (int i = 0; i <= n; i++) {  // since char_vector is initially empty, we need to add an element when i == n as well
-                this->char_vector.push_back(char_pool[0]);
-            }
-            while (true) {
-                bool success = generate_passwords_rec(user_pass, char_pool, current_len);
+            // for (int i = 0; i <= n; i++) {  // since char_vector is initially empty, we need to add an element when i == n as well
+            //     this->char_vector.push_back(char_pool[0]);
+            // }
+            bool success = false;
+            for (int i = 0; i < n; i++) {
+                success = generate_passwords_rec(password_input, char_pool, current_len);
                 if (success) {
                     mtx.lock();
                     found = true;
                     mtx.unlock();
                     break;
                 } else {
-                    n++;
                     char_vector.push_back(char_pool[0]);
                     print_vector(char_vector);
                 }
             }
-            cout << "Password found! It is: ";
-            print_vector(char_vector);
+            if (success) {
+                cout << "Password found!  It is: ";
+                print_vector(char_vector);
+            }
         }
 
         // recursive function that generates all possible passwords of length n
         bool generate_passwords_rec(vector<char> &user_pass, vector<char> char_pool, int n) {
-            if (n == -1) {
-                return compare_vector(user_pass);
+            if (n == 0) {
+                for (int i = begin_char; i <= end_char; i++) {
+                    char_vector[0] = char_pool[i];
+                    if (compare_vector(user_pass)) {
+                        return true;
+                    }
+                }
+                return false;
             } else {
                 for (int i = 0; i < char_pool.size(); i++) {
                     char_vector[n] = char_pool[i];
@@ -114,8 +120,6 @@ class VectorManipulator {
         int current_len;
         int begin_char;
         int end_char;
-        vector<char> char_pool;
-        vector<char> user_pass;
 };
 
 // function that spawns four threads to find the password
@@ -136,9 +140,13 @@ void cracking_controller() {
         // unsigned int* thread1;
         // int pthread_create(thread1, NULL, void *(*start_routine) (void *), void *arg);
         thread t1(worker_thread, n, 1);
-        thread tw(worker_thread, n, 2);
-        thread t2(worker_thread, n, 3);
-        thread t3(worker_thread, n, 4);
+        thread t2(worker_thread, n, 2);
+        thread t3(worker_thread, n, 3);
+        thread t4(worker_thread, n, 4);
+        t1.join();
+        t2.join();
+        t3.join();
+        t4.join();
         if (found) {
             break;
         } else {
@@ -151,7 +159,7 @@ void cracking_controller() {
 // thread helper function
 void worker_thread (int current_len, int covered_section) {
     int pool_size = char_pool.size();
-    auto dv = std::div(pool_size, 4);
+    auto dv = div(pool_size, 4);
     int slice_size = (int) dv.quot;
     int start = (covered_section - 1) * slice_size;
     int end;
