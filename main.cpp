@@ -5,6 +5,7 @@
 #include <mutex>
 
 using namespace std;
+using sec = chrono::duration<double>;
 
 class VectorManipulator;
 void worker_thread(int current_len, int covered_section);
@@ -47,7 +48,7 @@ class VectorManipulator {
             this->current_len = current_len;
             this->begin_char = begin_char;
             this->end_char = end_char;
-            this->char_vector = vector<char>(current_len);
+            this->char_vector = vector<char>(current_len + 1);
         }
         // methods
         bool compare_vector (vector<char> &user_pass) {
@@ -70,20 +71,11 @@ class VectorManipulator {
             // for (int i = 0; i <= n; i++) {  // since char_vector is initially empty, we need to add an element when i == n as well
             //     this->char_vector.push_back(char_pool[0]);
             // }
-            bool success = false;
-            for (int i = 0; i < n; i++) {
-                success = generate_passwords_rec(password_input, char_pool, current_len);
-                if (success) {
-                    mtx.lock();
-                    found = true;
-                    mtx.unlock();
-                    break;
-                } else {
-                    char_vector.push_back(char_pool[0]);
-                    print_vector(char_vector);
-                }
-            }
+            bool success = generate_passwords_rec(password_input, char_pool, current_len);
             if (success) {
+                mtx.lock();
+                found = true;
+                mtx.unlock();
                 cout << "Password found!  It is: ";
                 print_vector(char_vector);
             }
@@ -93,23 +85,32 @@ class VectorManipulator {
         bool generate_passwords_rec(vector<char> &user_pass, vector<char> char_pool, int n) {
             if (n == 0) {
                 for (int i = begin_char; i <= end_char; i++) {
-                    char_vector[0] = char_pool[i];
-                    if (compare_vector(user_pass)) {
-                        return true;
+                    if (found) {
+                        break;
+                    } else {
+                        char_vector[0] = char_pool[i];
+                        if (compare_vector(user_pass)) {
+                            return true;
+                        }
                     }
                 }
                 return false;
             } else {
                 for (int i = 0; i < char_pool.size(); i++) {
-                    char_vector[n] = char_pool[i];
-                    if (compare_vector(user_pass)) {
-                        return true;
+                    if (found) {
+                        break;
                     } else {
-                        bool success = generate_passwords_rec(user_pass, char_pool, n - 1);
-                        if (success) {
+                        char_vector[n] = char_pool[i];
+                        if (compare_vector(user_pass)) {
                             return true;
+                        } else {
+                            bool success = generate_passwords_rec(user_pass, char_pool, n - 1);
+                            if (success) {
+                                return true;
+                            }
                         }
                     }
+                    
                 }
                 return false;
             }
@@ -178,7 +179,9 @@ void worker_thread (int current_len, int covered_section) {
 int main(const int argc, const char* argv[])
 {
     parse_args(argc, argv, password_input);
-    print_vector(password_input);
+    const auto start_time = chrono::system_clock::now();
     cracking_controller();
+    const sec duration = chrono::system_clock::now() - start_time;
+    cout << "Time taken to crack password: " << duration.count() << " seconds" << endl;
     return 0;
 }
