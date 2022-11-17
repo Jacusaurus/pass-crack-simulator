@@ -3,17 +3,19 @@
 #include <cstring>
 #include <thread>
 #include <mutex>
+#include <boost/crc.hpp>
 
 using namespace std;
 using sec = chrono::duration<double>;
 
 class VectorManipulator;
 void worker_thread(int current_len, int covered_section);
-vector<char> char_pool = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 
+const vector<char> char_pool = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 
     'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '-', '_', '+', '=', '{', '}', '[', ']', '|', '\\', ':', ';', '"', '\'', '<', '>', ',', '.', '?', '/', '~', '`'};
 vector<char> password_input;
 bool found = false;
 mutex mtx;
+long user_pass_crc;
 
 // Parse command line arguments
 void parse_args(int argc, char const* argv[], vector<char> &args) {
@@ -31,6 +33,12 @@ void print_vector(vector<char> &char_vector) {
         cout << char_vector[i];
     }
     cout << endl;
+}
+
+long calculate_crc(vector<char> &char_vector) {
+    boost::crc_32_type result;
+    result.process_bytes(char_vector.data(), char_vector.size());
+    return result.checksum();
 }
 
 
@@ -51,16 +59,17 @@ class VectorManipulator {
             this->char_vector = vector<char>(current_len + 1);
         }
         // methods
-        bool compare_vector (vector<char> &user_pass) {
-            if (this->char_vector.size() != user_pass.size()) {
+        bool compare_vector () {
+            long candidate_crc = calculate_crc(this->char_vector);
+            if (candidate_crc != user_pass_crc) {
                 return false;
             }
             // for (int i = 0; i < this->char_vector.size(); i++) {
-            //     if (this->char_vector[i] != user_pass[i]) {
+            //     if (this->char_vector[i] != candidate_pass[i]) {
             //         return false;
             //     }
             // }
-            if (this->char_vector == user_pass) {
+            if (this->char_vector == password_input) {
                 return true;
             } else {
                 return false;
@@ -71,7 +80,7 @@ class VectorManipulator {
             // for (int i = 0; i <= n; i++) {  // since char_vector is initially empty, we need to add an element when i == n as well
             //     this->char_vector.push_back(char_pool[0]);
             // }
-            bool success = generate_passwords_rec(password_input, char_pool, current_len);
+            bool success = generate_passwords_rec(char_pool, current_len);
             if (success) {
                 mtx.lock();
                 found = true;
@@ -82,14 +91,14 @@ class VectorManipulator {
         }
 
         // recursive function that generates all possible passwords of length n
-        bool generate_passwords_rec(vector<char> &user_pass, vector<char> char_pool, int n) {
+        bool generate_passwords_rec(vector<char> char_pool, int n) {
             if (n == 0) {
                 for (int i = begin_char; i <= end_char; i++) {
                     if (found) {
                         break;
                     } else {
                         char_vector[0] = char_pool[i];
-                        if (compare_vector(user_pass)) {
+                        if (compare_vector()) {
                             return true;
                         }
                     }
@@ -101,10 +110,10 @@ class VectorManipulator {
                         break;
                     } else {
                         char_vector[n] = char_pool[i];
-                        if (compare_vector(user_pass)) {
+                        if (compare_vector()) {
                             return true;
                         } else {
-                            bool success = generate_passwords_rec(user_pass, char_pool, n - 1);
+                            bool success = generate_passwords_rec(char_pool, n - 1);
                             if (success) {
                                 return true;
                             }
@@ -144,10 +153,14 @@ void cracking_controller() {
         thread t2(worker_thread, n, 2);
         thread t3(worker_thread, n, 3);
         thread t4(worker_thread, n, 4);
+        thread t5(worker_thread, n, 5);
+        thread t6(worker_thread, n, 6);
         t1.join();
         t2.join();
         t3.join();
         t4.join();
+        t5.join();
+        t6.join();
         if (found) {
             break;
         } else {
@@ -160,11 +173,11 @@ void cracking_controller() {
 // thread helper function
 void worker_thread (int current_len, int covered_section) {
     int pool_size = char_pool.size();
-    auto dv = div(pool_size, 4);
+    auto dv = div(pool_size, 6);
     int slice_size = (int) dv.quot;
     int start = (covered_section - 1) * slice_size;
     int end;
-    if (covered_section == 4) {
+    if (covered_section == 6) {
         end = pool_size;
     } else {
         end = start + slice_size - 1;
@@ -179,6 +192,7 @@ void worker_thread (int current_len, int covered_section) {
 int main(const int argc, const char* argv[])
 {
     parse_args(argc, argv, password_input);
+    user_pass_crc = calculate_crc(password_input);
     const auto start_time = chrono::system_clock::now();
     cracking_controller();
     const sec duration = chrono::system_clock::now() - start_time;
