@@ -1,4 +1,4 @@
-# pass-crack-simulator
+# Password Cracking "Simulator"
 
 A simple program that "simulates" brute force password cracking.  It's not a real password cracker, it's just a program to showcase several C++ concepts, like multi-threading, mutexes, checksums, vectors, and more.
 
